@@ -2,3 +2,4 @@ __pycache__/
 .claude/
 .mcp.json
 *.pyc
+clip98-darwin-arm64

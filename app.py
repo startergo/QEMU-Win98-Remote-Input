@@ -59,7 +59,8 @@ class ScrollOverlay(NSObject):
         self._window.setAlphaValue_(0.85)
         self._window.setMovableByWindowBackground_(False)
         self._window.setIgnoresMouseEvents_(True)
-        self._window.setCollectionBehavior_(1 << 7)  # NSWindowCollectionBehaviorCanJoinAllSpaces
+        from AppKit import NSWindowCollectionBehaviorCanJoinAllSpaces
+        self._window.setCollectionBehavior_(NSWindowCollectionBehaviorCanJoinAllSpaces)
 
         # Background view with rounded corners
         bg = OverlayView.alloc().initWithFrame_(NSMakeRect(0, 0, width, height))

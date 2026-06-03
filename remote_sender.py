@@ -41,7 +41,7 @@ except ImportError:
     evdev = None
 
 from keymaps import EVDEV_KEY_TO_QCODE
-from network import make_key_event, make_abs_event, make_rel_event, make_btn_event, send_event
+from network import make_key_event, make_abs_event, make_rel_event, make_btn_event, make_scroll_event, send_event
 
 
 def list_devices():
@@ -103,7 +103,7 @@ def detect_devices():
     return keyboards, mice
 
 
-def forward_keyboard(sock, device, screen_w=32767, screen_h=32767):
+def forward_keyboard(sock, device, send_lock, screen_w=32767, screen_h=32767):
     """Read keyboard events from evdev and forward over TCP."""
     print(f"[KB] Forwarding: {device.name} ({device.path})")
     try:
@@ -113,12 +113,12 @@ def forward_keyboard(sock, device, screen_w=32767, screen_h=32767):
                 if qcode:
                     down = event.value != 0  # 1=down, 0=up, 2=repeat (treat as down)
                     evt = make_key_event(qcode, down if event.value != 2 else True)
-                    send_event(sock, evt)
+                    send_event(sock, evt, send_lock)
     except Exception as e:
         print(f"[KB] Error: {e}")
 
 
-def forward_mouse(sock, device, screen_w=None, screen_h=None):
+def forward_mouse(sock, device, send_lock, screen_w=None, screen_h=None):
     """Read mouse events from evdev and forward over TCP."""
     print(f"[MS] Forwarding: {device.name} ({device.path})")
     buttons = 0
@@ -130,24 +130,30 @@ def forward_mouse(sock, device, screen_w=None, screen_h=None):
                 if event.code == ecodes.BTN_LEFT:
                     buttons = (buttons | 1) if event.value else (buttons & ~1)
                     evt = make_btn_event("left", bool(event.value))
-                    send_event(sock, evt)
+                    send_event(sock, evt, send_lock)
                 elif event.code == ecodes.BTN_MIDDLE:
                     buttons = (buttons | 4) if event.value else (buttons & ~4)
                     evt = make_btn_event("middle", bool(event.value))
-                    send_event(sock, evt)
+                    send_event(sock, evt, send_lock)
                 elif event.code == ecodes.BTN_RIGHT:
                     buttons = (buttons | 2) if event.value else (buttons & ~2)
                     evt = make_btn_event("right", bool(event.value))
-                    send_event(sock, evt)
+                    send_event(sock, evt, send_lock)
 
             elif event.type == ecodes.EV_REL:
                 # Send as relative — QEMU handles coordinate mapping
                 if event.code == ecodes.REL_X:
                     evt = make_rel_event(event.value, 0)
-                    send_event(sock, evt)
+                    send_event(sock, evt, send_lock)
                 elif event.code == ecodes.REL_Y:
                     evt = make_rel_event(0, event.value)
-                    send_event(sock, evt)
+                    send_event(sock, evt, send_lock)
+                elif event.code == ecodes.REL_WHEEL:
+                    evt = make_scroll_event(event.value)
+                    send_event(sock, evt, send_lock)
+                elif event.code == ecodes.REL_HWHEEL:
+                    evt = make_scroll_event(0, event.value)
+                    send_event(sock, evt, send_lock)
 
             elif event.type == ecodes.EV_ABS:
                 # Touchscreen / tablet — send as absolute
@@ -156,7 +162,7 @@ def forward_mouse(sock, device, screen_w=None, screen_h=None):
                 elif event.code == ecodes.ABS_Y:
                     abs_y = event.value
                 evt = make_abs_event(abs_x, abs_y)
-                send_event(sock, evt)
+                send_event(sock, evt, send_lock)
 
     except Exception as e:
         print(f"[MS] Error: {e}")
@@ -173,7 +179,7 @@ Examples:
   %(prog)s --host 192.168.1.100 --auto
         """,
     )
-    parser.add_argument("--host", required=True, help="QEMU host IP address")
+    parser.add_argument("--host", help="QEMU host IP address")
     parser.add_argument("--port", type=int, default=9999, help="Remote server port (default: 9999)")
     parser.add_argument("--keyboard", help="Keyboard evdev device path")
     parser.add_argument("--mouse", help="Mouse evdev device path")
@@ -190,6 +196,11 @@ Examples:
     if args.list:
         list_devices()
         return
+
+    if not args.host:
+        print("ERROR: --host is required when forwarding events")
+        print("  Example: python3 remote_sender.py --host 192.168.1.100 --auto")
+        sys.exit(1)
 
     # ── Determine devices ────────────────────────────────────
     kb_paths = []
@@ -233,17 +244,18 @@ Examples:
     print(f"Connected to {args.host}:{args.port}")
 
     # ── Forward devices ──────────────────────────────────────
+    send_lock = threading.Lock()  # serializes socket writes from all device threads
     threads = []
 
     for path in kb_paths:
         dev = evdev.InputDevice(path)
-        t = threading.Thread(target=forward_keyboard, args=(sock, dev), daemon=True)
+        t = threading.Thread(target=forward_keyboard, args=(sock, dev, send_lock), daemon=True)
         t.start()
         threads.append(t)
 
     for path in ms_paths:
         dev = evdev.InputDevice(path)
-        t = threading.Thread(target=forward_mouse, args=(sock, dev), daemon=True)
+        t = threading.Thread(target=forward_mouse, args=(sock, dev, send_lock), daemon=True)
         t.start()
         threads.append(t)
 

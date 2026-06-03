@@ -114,13 +114,12 @@ EVDEV_KEY_TO_QCODE = {
     # Arrow keys
     0x4B: "left",   0x4D: "right",  0x50: "down",  0x48: "up",
 
-    # Keypad
-    0x52: "kp_0",  0x4F: "kp_1",  0x50: "kp_2",  0x51: "kp_3",
-    0x4B: "kp_4",  0x4C: "kp_5",  0x4D: "kp_6",  0x47: "kp_7",
-    0x48: "kp_8",  0x49: "kp_9",
-    0x53: "kp_decimal", 0x37: "kp_multiply", 0x4E: "kp_add",
-    0x4A: "kp_subtract", 0x35: "kp_divide",  0x60: "kp_enter",
-    0x69: "kp_enter",
+    # Keypad (only entries with unique evdev codes; shared codes are
+    # mapped to their navigation/arrow equivalents above — the kernel
+    # produces the correct evdev code based on NumLock state)
+    0x37: "kp_multiply", 0x4E: "kp_add",
+    0x4A: "kp_subtract", 0x60: "kp_enter",
+    0x52: "kp_0",  0x4C: "kp_5",
 
     # Multimedia
     0x6C: "volup",  0x6E: "voldown",  0x71: "mute",

@@ -28,6 +28,7 @@ rm -f "$QMP_SOCK"
 # ── Parse arguments ──────────────────────────────────────────
 START_REMOTE=0
 START_CLIPBOARD=0
+CLIP98_BIN="clip98-darwin-arm64"
 EXTRA_ARGS=""
 
 for arg in "$@"; do
@@ -71,7 +72,7 @@ qemu-system-i386 \
     -device ac97,audiodev=snd0 \
     -netdev user,id=net0,hostfwd=tcp::2222-:22 \
     -device pcnet,rombar=0,netdev=net0 \
-    -drive id=fd01,if=floppy,format=raw,file="$FLOPPY_IMAGE" \
+    $(test -f "$FLOPPY_IMAGE" && echo "-drive id=fd01,if=floppy,format=raw,file=\"$FLOPPY_IMAGE\"") \
     -drive id=win98,if=none,file="$DISK_IMAGE" \
     -device scsi-hd,drive=win98 \
     -drive id=icd04,if=none,media=cdrom,file="$CDROM_IMAGE" \
@@ -114,12 +115,26 @@ fi
 # Uncomment to auto-start local capture:
 # python3 main.py --qmp "$QMP_SOCK" &
 
+# ── Start clipboard sync ────────────────────────────────────
+if [ "$START_CLIPBOARD" = "1" ]; then
+    if [ ! -x "$CLIP98_BIN" ]; then
+        echo "Downloading clip98..."
+        curl -LO https://github.com/giulioz/clip98/releases/download/latest/"$CLIP98_BIN"
+        chmod +x "$CLIP98_BIN"
+    fi
+    echo "Starting clip98 clipboard sync..."
+    ./"$CLIP98_BIN" &
+    CLIP98_PID=$!
+    echo "clip98 started (PID: $CLIP98_PID)"
+fi
+
 # ── Wait for QEMU to exit ────────────────────────────────────
 echo "Press Ctrl+C to stop everything"
-wait $QEMU_PID 2>/dev/null
+wait $QEMU_PID 2>/dev/null || true
 
 # ── Cleanup ──────────────────────────────────────────────────
 echo "QEMU exited. Cleaning up..."
 [ -n "$REMOTE_PID" ] && kill $REMOTE_PID 2>/dev/null
+[ -n "$CLIP98_PID" ] && kill $CLIP98_PID 2>/dev/null
 rm -f "$QMP_SOCK"
 echo "Done."

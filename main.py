@@ -112,7 +112,7 @@ Examples:
   %(prog)s --qmp /tmp/qemu.sock --capture           # Exclusive capture
   %(prog)s --qmp /tmp/qemu.sock --remote            # Network input server
   %(prog)s --qmp /tmp/qemu.sock --inject --type "Hello"
-  %(prog)s --qmp /tmp/qemu.sock --inject --click 16000,8000
+  %(prog)s --qmp /tmp/qemu.sock --inject --click 16000 8000
   %(prog)s --qmp /tmp/qemu.sock --inject --key combo ctrl alt delete
         """,
     )

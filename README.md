@@ -14,56 +14,34 @@ A macOS-native equivalent of [remote-evdev-python](https://github.com/Surferlul/
 └─────────────────────┘              └──────────────┘                └──────────────┘
 ```
 
-Unlike `remote-evdev-python` (which requires `uinput` in a Linux guest) or `HIDInjector` (which requires Windows 10 VHF), this tool injects events at the **QEMU hypervisor level** via the QEMU Machine Protocol. QEMU then translates them into standard PS/2 or USB HID input that the guest OS already understands.
-
 ## Features
 
 - 🖥️ **macOS native** — captures input via CGEvent tap (no evdev needed)
-- 🐧 **Linux remote sender** — forward evdev devices from a Linux machine over TCP
-- 🎯 **Absolute mouse** — maps screen coordinates to HID range (0–32767) via usb-tablet
 - 🖱️ **Scroll** — two-finger trackpad swipe forwarded as keystrokes (Arrow keys or Space/Shift+Space, switchable with `--scroll-keys`)
+- 🎯 **Absolute mouse** — maps screen coordinates to HID range (0–32767) via usb-tablet
 - ⌨️ **Full keyboard** — maps macOS/Linux keycodes to QEMU qcodes
 - 🔄 **Mirror or capture mode** — non-intrusive or exclusive input forwarding
 - 🌐 **Remote mode** — accept input events over TCP from any machine
 - 💉 **Inject mode** — one-shot automation (type strings, click coordinates, send key combos)
-- 🪟 **Works with Win98** — no guest drivers or software needed for mouse/keyboard
+- 🐧 **Linux remote sender** — forward evdev devices from a Linux machine over TCP
 
 ## Requirements
 
-### QEMU (host)
-- QEMU with QMP support (standard in all distributions)
-- `-device usb-tablet` for absolute mouse positioning
-- `-qmp unix:/path/to/qemu.sock,server,nowait` for QMP socket
-
-### Python (host)
+- QEMU with QMP support + `-device usb-tablet`
 - Python 3.10+
-- `pyobjc-framework-Quartz` (for macOS input capture)
-
-### Python (Linux remote sender, optional)
-- Python 3.10+
-- `evdev` (Linux only)
-
-Install dependencies:
-
-```bash
-# macOS (required for local mode)
-pip3 install -r requirements.txt --break-system-packages
-
-# Linux remote sender (optional)
-pip3 install evdev
-```
+- macOS: `pip3 install -r requirements.txt --break-system-packages`
+- Linux (optional): `pip3 install evdev`
 
 ## Quick Start
 
 ### 1. Add QMP to your QEMU config
 
-Add these flags to your existing QEMU command:
-
 ```bash
 -qmp unix:/tmp/qemu-win98.sock,server,nowait
 ```
 
-Your full command might look like:
+<details>
+<summary>Full QEMU command example</summary>
 
 ```bash
 qemu-system-i386 -nodefaults -rtc base=localtime -display sdl -monitor stdio \
@@ -84,6 +62,8 @@ qemu-system-i386 -nodefaults -rtc base=localtime -display sdl -monitor stdio \
     -boot menu=on
 ```
 
+</details>
+
 ### 2. Run
 
 **Menu bar app** (recommended — native macOS app with floating overlay, switch modes from menu bar):
@@ -102,19 +82,27 @@ python3 main.py --qmp /tmp/qemu-win98.sock --scroll-only
 python3 main.py --qmp /tmp/qemu-win98.sock --scroll-only --scroll-keys space
 ```
 
-**Mirror mode** (events go to both host and guest):
+<details>
+<summary>Other modes</summary>
 
+**Mirror mode** (events go to both host and guest):
 ```bash
 python3 main.py --qmp /tmp/qemu-win98.sock
 ```
 
 **Capture mode** (exclusive — only guest gets input):
-
 ```bash
 python3 main.py --qmp /tmp/qemu-win98.sock --capture
 ```
 
-## Modes
+</details>
+
+> **Accessibility Permission Required:** On first run, macOS will prompt you to grant Accessibility access to your Terminal or Python. Go to **System Settings → Privacy & Security → Accessibility** and enable it.
+
+---
+
+<details>
+<summary>📖 Modes — detailed usage</summary>
 
 ### Local (macOS CGEvent capture)
 
@@ -127,8 +115,6 @@ python3 main.py --qmp /tmp/qemu-win98.sock
 # Capture — only guest receives events (host is suppressed)
 python3 main.py --qmp /tmp/qemu-win98.sock --capture
 ```
-
-> **Accessibility Permission Required:** On first run, macOS will prompt you to grant Accessibility access to your Terminal or Python. Go to **System Settings → Privacy & Security → Accessibility** and enable it.
 
 ### Remote (TCP input server)
 
@@ -180,7 +166,40 @@ python3 main.py --qmp /tmp/qemu-win98.sock --inject --move 20000 10000
 python3 main.py --qmp /tmp/qemu-win98.sock --inject --type "slow" --delay 100
 ```
 
-## File Structure
+</details>
+
+<details>
+<summary>🔧 Technical Details</summary>
+
+### Mouse Coordinate Mapping
+
+The `usb-tablet` device uses HID absolute coordinates (0–32767). The tool maps your screen resolution to this range:
+
+```
+  macOS screen (e.g. 2560x1600)           QEMU usb-tablet HID
+  ┌────────────────────────┐              ┌──────────────────────┐
+  │ 0,0            2560,0  │              │ 0,0          32767,0 │
+  │                        │              │                      │
+  │           1280, 800    │   ────▶      │        16384, 16384  │
+  │                        │              │                      │
+  │ 0,1600      2560,1600  │              │ 0,32767  32767,32767 │
+  └────────────────────────┘              └──────────────────────┘
+```
+
+### Why Not remote-evdev-python or HIDInjector?
+
+| | remote-evdev-python | HIDInjector | This tool |
+|---|---|---|---|
+| Runs inside guest | ❌ (needs Linux) | ✅ (needs Win10+) | ❌ (runs on host) |
+| Transport | TCP → uinput | WriteFile → VHF kernel driver | QMP → QEMU input layer |
+| Guest requirements | Linux evdev + uinput | Windows 10 VHF | **None** |
+| Win98 compatible | ❌ | ❌ | ✅ |
+| macOS host | ❌ (evdev only) | N/A | ✅ (CGEvent) |
+| Linux remote | ✅ | N/A | ✅ (evdev) |
+| Absolute mouse | ✅ (uinput) | ✅ (HID descriptor) | ✅ (usb-tablet) |
+| Scroll | ❌ | ✅ | ✅ (Arrow/Space keys via QMP) |
+
+### File Structure
 
 ```
 qemu-win98-remote-input/
@@ -197,35 +216,10 @@ qemu-win98-remote-input/
 └── README.md            # This file
 ```
 
-## Why Not remote-evdev-python or HIDInjector?
+</details>
 
-| | remote-evdev-python | HIDInjector | This tool |
-|---|---|---|---|
-| Runs inside guest | ❌ (needs Linux) | ✅ (needs Win10+) | ❌ (runs on host) |
-| Transport | TCP → uinput | WriteFile → VHF kernel driver | QMP → QEMU input layer |
-| Guest requirements | Linux evdev + uinput | Windows 10 VHF | **None** |
-| Win98 compatible | ❌ | ❌ | ✅ |
-| macOS host | ❌ (evdev only) | N/A | ✅ (CGEvent) |
-| Linux remote | ✅ | N/A | ✅ (evdev) |
-| Absolute mouse | ✅ (uinput) | ✅ (HID descriptor) | ✅ (usb-tablet) |
-| Scroll | ❌ | ✅ | ✅ (Arrow/Space keys via QMP) |
-
-## Mouse Coordinate Mapping
-
-The `usb-tablet` device uses HID absolute coordinates (0–32767). The tool maps your screen resolution to this range:
-
-```
-  macOS screen (e.g. 2560x1600)           QEMU usb-tablet HID
-  ┌────────────────────────┐              ┌──────────────────────┐
-  │ 0,0            2560,0  │              │ 0,0          32767,0 │
-  │                        │              │                      │
-  │           1280, 800    │   ────▶      │        16384, 16384  │
-  │                        │              │                      │
-  │ 0,1600      2560,1600  │              │ 0,32767  32767,32767 │
-  └────────────────────────┘              └──────────────────────┘
-```
-
-## Troubleshooting
+<details>
+<summary>❓ Troubleshooting</summary>
 
 ### "Cannot create CGEvent tap"
 Grant Accessibility permissions:
@@ -258,7 +252,7 @@ Grant Accessibility permissions:
 - **`--scroll-keys space`** — Space/Shift+Space. Works in web browsers (Browservice)
 - Switch modes at any time by restarting with a different `--scroll-keys` value
 
-## Using with launch-win98.sh
+### Using with launch-win98.sh
 
 The included launch script starts QEMU with QMP and optionally starts the remote server:
 
@@ -274,6 +268,8 @@ chmod +x launch-win98.sh
 # Headless mode
 ./launch-win98.sh --headless --remote
 ```
+
+</details>
 
 ## License
 

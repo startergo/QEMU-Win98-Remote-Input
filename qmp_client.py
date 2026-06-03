@@ -33,6 +33,7 @@ class QMPClient:
 
     def __init__(self, sock_path, timeout=5):
         self.sock_path = sock_path
+        self._buf = b""
         self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self.sock.settimeout(timeout)
         self.sock.connect(sock_path)
@@ -44,17 +45,16 @@ class QMPClient:
         self._execute("qmp_capabilities")
 
     def _read_response(self):
-        buf = b""
         while True:
             try:
                 chunk = self.sock.recv(4096)
             except socket.timeout:
-                return {}
+                raise QMPError("QMP read timed out")
             if not chunk:
                 raise QMPError("QMP connection closed")
-            buf += chunk
-            while b"\n" in buf:
-                line, buf = buf.split(b"\n", 1)
+            self._buf += chunk
+            while b"\n" in self._buf:
+                line, self._buf = self._buf.split(b"\n", 1)
                 line = line.strip()
                 if line:
                     try:
@@ -158,11 +158,9 @@ class QMPClient:
 
     def disconnect(self):
         try:
-            self._execute("quit")
-        except (QMPError, OSError):
-            pass
-        finally:
             self.sock.close()
+        except OSError:
+            pass
 
     def __enter__(self):
         return self

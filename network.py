@@ -18,6 +18,7 @@ Event formats:
 import json
 import socket
 import sys
+import threading
 import time
 
 from qmp_client import QMPClient
@@ -42,6 +43,8 @@ def start_server(qmp, host="0.0.0.0", port=9999):
     server.bind((host, port))
     server.listen(5)
 
+    qmp_lock = threading.Lock()  # protects QMPClient from concurrent access
+
     print(f"Remote input server listening on {host}:{port}")
     print("Waiting for connections... (Ctrl+C to stop)")
 
@@ -49,21 +52,20 @@ def start_server(qmp, host="0.0.0.0", port=9999):
         while True:
             conn, addr = server.accept()
             print(f"[+] Client connected: {addr[0]}:{addr[1]}")
-            threading_handler(conn, addr, qmp)
+            threading_handler(conn, addr, qmp, qmp_lock)
     except KeyboardInterrupt:
         print("\nServer stopped.")
     finally:
         server.close()
 
 
-def threading_handler(conn, addr, qmp):
+def threading_handler(conn, addr, qmp, qmp_lock):
     """Handle a single client connection."""
-    import threading
-    t = threading.Thread(target=_handle_client, args=(conn, addr, qmp), daemon=True)
+    t = threading.Thread(target=_handle_client, args=(conn, addr, qmp, qmp_lock), daemon=True)
     t.start()
 
 
-def _handle_client(conn, addr, qmp):
+def _handle_client(conn, addr, qmp, qmp_lock):
     """Process incoming JSON events from a remote sender."""
     buf = b""
     stats = {"events": 0, "errors": 0}
@@ -82,7 +84,8 @@ def _handle_client(conn, addr, qmp):
                     continue
                 try:
                     evt = json.loads(line)
-                    _dispatch_event(qmp, evt)
+                    with qmp_lock:
+                        _dispatch_event(qmp, evt)
                     stats["events"] += 1
                 except (json.JSONDecodeError, KeyError) as e:
                     stats["errors"] += 1
@@ -147,6 +150,18 @@ def make_scroll_event(dy, dx=0):
     return {"type": "scroll", "dy": dy, "dx": dx}
 
 
-def send_event(sock, event):
-    """Send a single event as a JSON line."""
-    sock.sendall((json.dumps(event) + "\n").encode())
+def send_event(sock, event, send_lock=None):
+    """Send a single event as a JSON line.
+
+    Args:
+        sock: Connected TCP socket.
+        event: Event dict to serialize and send.
+        send_lock: Optional threading.Lock to serialize writes when
+                   multiple threads share the same socket.
+    """
+    data = (json.dumps(event) + "\n").encode()
+    if send_lock is not None:
+        with send_lock:
+            sock.sendall(data)
+    else:
+        sock.sendall(data)
