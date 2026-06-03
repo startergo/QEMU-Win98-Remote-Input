@@ -57,6 +57,11 @@ done
 echo "Starting QEMU: $VM_NAME"
 echo "QMP socket: $QMP_SOCK"
 
+# Only include floppy drive if image exists
+if [ -f "$FLOPPY_IMAGE" ]; then
+    FLOPPY_DRIVE=1
+fi
+
 qemu-system-i386 \
     -nodefaults \
     -rtc base=localtime \
@@ -72,7 +77,7 @@ qemu-system-i386 \
     -device ac97,audiodev=snd0 \
     -netdev user,id=net0,hostfwd=tcp::2222-:22 \
     -device pcnet,rombar=0,netdev=net0 \
-    $(test -f "$FLOPPY_IMAGE" && echo "-drive id=fd01,if=floppy,format=raw,file=\"$FLOPPY_IMAGE\"") \
+    ${FLOPPY_DRIVE:+-drive id=fd01,if=floppy,format=raw,file="$FLOPPY_IMAGE"} \
     -drive id=win98,if=none,file="$DISK_IMAGE" \
     -device scsi-hd,drive=win98 \
     -drive id=icd04,if=none,media=cdrom,file="$CDROM_IMAGE" \
@@ -121,11 +126,19 @@ if [ "$START_CLIPBOARD" = "1" ]; then
         echo "Downloading clip98..."
         curl -LO https://github.com/giulioz/clip98/releases/download/latest/"$CLIP98_BIN"
         chmod +x "$CLIP98_BIN"
+        # Verify it's a real binary (not a redirect/error page)
+        if [ "$(file "$CLIP98_BIN" 2>/dev/null | grep -c 'Mach-O\|ELF\|PE32\|executable')" -eq 0 ]; then
+            echo "ERROR: Downloaded file is not a valid binary. It may be a redirect page."
+            rm -f "$CLIP98_BIN"
+            START_CLIPBOARD=0
+        fi
     fi
-    echo "Starting clip98 clipboard sync..."
-    ./"$CLIP98_BIN" &
-    CLIP98_PID=$!
-    echo "clip98 started (PID: $CLIP98_PID)"
+    if [ "$START_CLIPBOARD" = "1" ]; then
+        echo "Starting clip98 clipboard sync..."
+        ./"$CLIP98_BIN" &
+        CLIP98_PID=$!
+        echo "clip98 started (PID: $CLIP98_PID)"
+    fi
 fi
 
 # ── Wait for QEMU to exit ────────────────────────────────────
