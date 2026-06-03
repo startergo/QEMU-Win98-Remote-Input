@@ -7,10 +7,10 @@ A macOS-native equivalent of [remote-evdev-python](https://github.com/Surferlul/
 ## How It Works
 
 ```
-┌─────────────────────┐     QMP      ┌──────────────┐     USB HID     ┌──────────────┐
-│  macOS CGEvent      │────socket───▶│  QEMU        │──emulation────▶│  Win98 Guest  │
-│  or Linux evdev     │   (JSON)     │  input layer │   (ps2/usb)    │  sees real    │
-│  or remote TCP      │              │              │                │  input device │
+┌─────────────────────┐     QMP      ┌──────────────┐     USB HID    ┌──────────────┐
+│  macOS CGEvent      │────socket───▶│  QEMU        │──emulation────▶│  Win98 Guest │
+│  or Linux evdev     │   (JSON)     │  input layer │   (ps2/usb)    │  sees real   │
+│  or remote TCP      │              │              │                │  input device│
 └─────────────────────┘              └──────────────┘                └──────────────┘
 ```
 
@@ -216,11 +216,12 @@ The `usb-tablet` device uses HID absolute coordinates (0–32767). The tool maps
 
 ```
 macOS screen (e.g. 2560×1600)          QEMU usb-tablet HID
-  ┌─────────────────────┐               ┌─────────────────┐
-  │                     │               │ 0,0         32767,0
-  │    1280, 800        │  ────▶        │    16384, 16384  │
-  │                     │               │                 │
-  └─────────────────────┘               0,32767    32767,32767
+┌─────────────────────┐               ┌─────────────────┐
+│                     │               │ 0,0       32767,0│
+│    1280, 800        │  ────▶        │   16384, 16384  │
+│                     │               │                 │
+└─────────────────────┘               │ 0,32767  32767,32767│
+                                      └─────────────────┘
 ```
 
 ## Troubleshooting
