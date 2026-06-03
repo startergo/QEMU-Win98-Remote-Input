@@ -192,7 +192,7 @@ The `usb-tablet` device uses HID absolute coordinates (0–32767). The tool maps
 |---|---|---|---|
 | Runs inside guest | ❌ (needs Linux) | ✅ (needs Win10+) | ❌ (runs on host) |
 | Transport | TCP → uinput | WriteFile → VHF kernel driver | QMP → QEMU input layer |
-| Guest requirements | Linux evdev + uinput | Windows 10 VHF | **None** |
+| Guest requirements | Linux evdev + uinput | Windows 10 VHF | None (scroll needs IntelliPoint) |
 | Win98 compatible | ❌ | ❌ | ✅ |
 | macOS host | ❌ (evdev only) | N/A | ✅ (CGEvent) |
 | Linux remote | ✅ | N/A | ✅ (evdev) |
