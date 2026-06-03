@@ -72,7 +72,6 @@ def start_capture(qmp, capture=False, screen_size=None, scroll_only=False, scrol
     # ── Build event mask ────────────────────────────────────
     event_mask = (
         (1 << kCGEventKeyDown) | (1 << kCGEventKeyUp) |
-        (1 << kCGEventFlagsChanged) |
         (1 << kCGEventMouseMoved) | (1 << kCGEventLeftMouseDragged) |
         (1 << kCGEventLeftMouseDown) | (1 << kCGEventLeftMouseUp) |
         (1 << kCGEventRightMouseDown) | (1 << kCGEventRightMouseUp) |
