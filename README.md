@@ -86,7 +86,13 @@ qemu-system-i386 -nodefaults -rtc base=localtime -display sdl -monitor stdio \
 
 ### 2. Run
 
-**Scroll-only mode** (recommended — only forwards scroll, mouse/keyboard handled by QEMU's usb-tablet natively):
+**Menu bar app** (recommended — native macOS app with floating overlay, switch modes from menu bar):
+
+```bash
+python3 main.py --qmp /tmp/qemu-win98.sock --scroll-only --app
+```
+
+**Scroll-only mode** (terminal — only forwards scroll, mouse/keyboard handled by QEMU's usb-tablet natively):
 
 ```bash
 # Arrow keys — line-by-line scroll (Explorer, text editors, general use)
@@ -179,6 +185,7 @@ python3 main.py --qmp /tmp/qemu-win98.sock --inject --type "slow" --delay 100
 ```
 qemu-win98-remote-input/
 ├── main.py              # CLI entry point (macOS host)
+├── app.py               # macOS menu bar app + floating overlay
 ├── qmp_client.py        # QMP protocol client
 ├── keymaps.py           # macOS/Linux → QEMU keycode mappings
 ├── macos_input.py       # macOS CGEvent input capture

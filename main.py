@@ -35,6 +35,12 @@ from qmp_client import QMPClient, QMPError
 
 def cmd_local(args):
     """Local mode: capture macOS input and forward to QEMU."""
+    if args.app:
+        from app import run_app
+        qmp = QMPClient(args.qmp)
+        print(f"Connected to QEMU at {args.qmp}")
+        run_app(qmp, scroll_keys=args.scroll_keys)
+        return
     from macos_input import start_capture
     qmp = QMPClient(args.qmp)
     print(f"Connected to QEMU at {args.qmp}")
@@ -127,6 +133,10 @@ Examples:
     parser.add_argument(
         "--scroll-keys", choices=["arrows", "space"], default="arrows",
         help="Scroll key mapping: arrows (Arrow Up/Down, default) or space (Space/Shift+Space for browsers)",
+    )
+    parser.add_argument(
+        "--app", action="store_true",
+        help="Launch as macOS menu bar app with floating overlay",
     )
     parser.add_argument(
         "--remote", action="store_true",
