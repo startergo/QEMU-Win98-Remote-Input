@@ -296,6 +296,9 @@ def _start_scroll_capture(qmp, controller):
             CFRunLoopAddSource, kCFRunLoopCommonModes,
             CGEventGetIntegerValueField,
             kCGScrollWheelEventDeltaAxis1, kCGScrollWheelEventDeltaAxis2,
+            CGEventGetLocation,
+            CGWindowListCopyWindowInfo, kCGWindowListOptionOnScreenOnly,
+            kCGNullWindowID,
         )
     except ImportError:
         print("ERROR: pyobjc-framework-Quartz not installed.")
@@ -306,9 +309,29 @@ def _start_scroll_capture(qmp, controller):
 
     event_mask = 1 << kCGEventScrollWheel
 
+    def _is_scroll_in_qemu(event):
+        """Check if a scroll event occurred inside a QEMU window."""
+        loc = CGEventGetLocation(event)
+        windows = CGWindowListCopyWindowInfo(
+            kCGWindowListOptionOnScreenOnly, kCGNullWindowID
+        )
+        for w in windows:
+            owner = (w.get("kCGWindowOwnerName") or "").lower()
+            if "qemu" not in owner:
+                continue
+            bounds = w.get("kCGWindowBounds")
+            if not bounds:
+                continue
+            if (bounds["X"] <= loc.x <= bounds["X"] + bounds["Width"] and
+                    bounds["Y"] <= loc.y <= bounds["Y"] + bounds["Height"]):
+                return True
+        return False
+
     def callback(proxy, event_type, event, refcon):
         try:
             if event_type == kCGEventScrollWheel and controller.active:
+                if not _is_scroll_in_qemu(event):
+                    return event
                 dy = CGEventGetIntegerValueField(event, kCGScrollWheelEventDeltaAxis1)
                 dy = max(-10, min(10, dy))
                 if dy:
@@ -337,7 +360,7 @@ def _start_scroll_capture(qmp, controller):
     mode_label = "Arrow Keys ⬆⬇" if controller.scroll_keys == "arrows" else "Space/Shift+Space ␣⇧"
     print(f"╔══════════════════════════════════════════════╗")
     print(f"║  macOS Scroll → QEMU Win98 via QMP           ║")
-    print(f"║  Mode: {mode_label:<37s}                     ║")
+    print(f"║  Mode: {mode_label:<37s} ║")
     print(f"║  Click 'Scroll' in menu bar to change mode   ║")
     print(f"║  Quit from menu bar to stop (Ctrl+C won't)   ║")
     print(f"╚══════════════════════════════════════════════╝")
