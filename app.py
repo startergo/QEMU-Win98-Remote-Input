@@ -335,8 +335,8 @@ def _start_scroll_capture(qmp, controller):
 
     mode_label = "Arrow Keys ⬆⬇" if controller.scroll_keys == "arrows" else "Space/Shift+Space ␣⇧"
     print(f"╔══════════════════════════════════════════════╗")
-    print(f"║  macOS Scroll → QEMU Win98 via QMP          ║")
-    print(f"║  Mode: {mode_label:<37s}║")
-    print(f"║  Click 'Scroll' in menu bar to change mode  ║")
-    print(f"║  Quit from menu bar to stop (Ctrl+C won't)  ║")
+    print(f"║  macOS Scroll → QEMU Win98 via QMP           ║")
+    print(f"║  Mode: {mode_label:<37s}                     ║")
+    print(f"║  Click 'Scroll' in menu bar to change mode   ║")
+    print(f"║  Quit from menu bar to stop (Ctrl+C won't)   ║")
     print(f"╚══════════════════════════════════════════════╝")
