@@ -16,14 +16,14 @@ A macOS-native equivalent of [remote-evdev-python](https://github.com/Surferlul/
 
 ## Features
 
-- 🖥️ **macOS native** — captures input via CGEvent tap (no evdev needed)
-- 🖱️ **Scroll** — two-finger trackpad swipe forwarded as keystrokes (Arrow keys or Space/Shift+Space, switchable with `--scroll-keys`)
-- 🎯 **Absolute mouse** — maps screen coordinates to HID range (0–32767) via usb-tablet
-- ⌨️ **Full keyboard** — maps macOS/Linux keycodes to QEMU qcodes
-- 🔄 **Mirror or capture mode** — non-intrusive or exclusive input forwarding
-- 🌐 **Remote mode** — accept input events over TCP from any machine
-- 💉 **Inject mode** — one-shot automation (type strings, click coordinates, send key combos)
-- 🐧 **Linux remote sender** — forward evdev devices from a Linux machine over TCP
+- **macOS native** — captures input via CGEvent tap (no evdev needed)
+- **Scroll** — two-finger trackpad swipe forwarded as keystrokes (Arrow keys or Space/Shift+Space, switchable with `--scroll-keys`)
+- **Absolute mouse** — maps screen coordinates to HID range (0–32767) via usb-tablet
+- **Full keyboard** — maps macOS/Linux keycodes to QEMU qcodes
+- **Mirror or capture mode** — non-intrusive or exclusive input forwarding
+- **Remote mode** — accept input events over TCP from any machine
+- **Inject mode** — one-shot automation (type strings, click coordinates, send key combos)
+- **Linux remote sender** — forward evdev devices from a Linux machine over TCP
 
 ## Requirements
 
