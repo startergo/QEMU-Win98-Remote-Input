@@ -250,7 +250,7 @@ Grant Accessibility permissions:
 - Two-finger swipe is mapped to keyboard keys (not a real scroll wheel)
 - **`--scroll-keys arrows`** (default) — Arrow Up/Down. Works in Explorer, text editors, most apps
 - **`--scroll-keys space`** — Space/Shift+Space. Works in web browsers (Browservice)
-- Switch modes at any time with `--scroll-keys` or from the menu bar app
+- Switch modes at any time from the menu bar app (`--app`), or restart with a different `--scroll-keys` value
 
 ### Using with launch-win98.sh
 

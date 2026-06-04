@@ -129,7 +129,6 @@ class QMPClient:
             keys: "arrows" for Arrow Up/Down (Explorer, text editors),
                   "space" for Space/Shift+Space (web browsers).
         """
-        count = min(abs(dy), 3)
         if keys == "space":
             # Space scrolls a full page — one press per event is enough
             if dy > 0:
@@ -141,6 +140,7 @@ class QMPClient:
                 self.send_key("spc", down=True)
                 self.send_key("spc", down=False)
         else:
+            count = min(abs(dy), 3)
             key = "up" if dy > 0 else "down"
             for _ in range(count):
                 self.send_key(key, down=True)

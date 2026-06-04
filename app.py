@@ -312,37 +312,47 @@ def _start_scroll_capture(qmp, controller):
     event_mask = 1 << kCGEventScrollWheel
 
     def _is_scroll_in_qemu(event):
-        """Check if a scroll event occurred inside a QEMU window."""
+        """Check if a scroll event occurred on top of a QEMU window.
+
+        Returns True only if the topmost window under the cursor belongs to
+        QEMU.  This prevents scroll injection when a non-QEMU window overlaps
+        the QEMU window area.
+        """
         loc = CGEventGetLocation(event)
         windows = CGWindowListCopyWindowInfo(
             kCGWindowListOptionOnScreenOnly, kCGNullWindowID
         )
         for w in windows:
             owner = (w.get("kCGWindowOwnerName") or "").lower()
-            if "qemu" not in owner:
-                continue
             bounds = w.get("kCGWindowBounds")
             if not bounds:
                 continue
-            if (bounds["X"] <= loc.x <= bounds["X"] + bounds["Width"] and
+            # Check if cursor is inside this window
+            if not (bounds["X"] <= loc.x <= bounds["X"] + bounds["Width"] and
                     bounds["Y"] <= loc.y <= bounds["Y"] + bounds["Height"]):
-                return True
+                continue
+            # This is the topmost window at the cursor — is it QEMU?
+            return "qemu" in owner
         return False
 
     def callback(proxy, event_type, event, refcon):
         try:
             if event_type == kCGEventScrollWheel and controller.active:
-                if not _is_scroll_in_qemu(event):
+                # Cheap checks first — skip expensive window enumeration on
+                # throttled or zero-delta events
+                dy = CGEventGetIntegerValueField(event, kCGScrollWheelEventDeltaAxis1)
+                dy = max(-10, min(10, dy))
+                if not dy:
                     return event
                 now = time.monotonic()
                 if now - last_scroll[0] < 0.08:  # 80 ms throttle
                     return event
+                # Expensive: check cursor is inside the topmost QEMU window
+                if not _is_scroll_in_qemu(event):
+                    return event
                 last_scroll[0] = now
-                dy = CGEventGetIntegerValueField(event, kCGScrollWheelEventDeltaAxis1)
-                dy = max(-10, min(10, dy))
-                if dy:
-                    qmp.send_scroll(dy, keys=controller.scroll_keys)
-                    stats["scrolls"] += 1
+                qmp.send_scroll(dy, keys=controller.scroll_keys)
+                stats["scrolls"] += 1
             return event
         except Exception as e:
             print(f"[!] Event error: {e}", file=sys.stderr)
