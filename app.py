@@ -296,24 +296,68 @@ def _start_scroll_capture(qmp, controller):
             CFRunLoopAddSource, kCFRunLoopCommonModes,
             CGEventGetIntegerValueField,
             kCGScrollWheelEventDeltaAxis1, kCGScrollWheelEventDeltaAxis2,
+            CGEventGetLocation,
+            CGWindowListCopyWindowInfo, kCGWindowListOptionOnScreenOnly,
+            kCGNullWindowID,
         )
     except ImportError:
         print("ERROR: pyobjc-framework-Quartz not installed.")
         print("  Run: pip3 install pyobjc-framework-Quartz")
         sys.exit(1)
 
+    import time
     stats = {"scrolls": 0}
+    last_scroll = [0.0]  # mutable for closure; throttle timestamp
 
     event_mask = 1 << kCGEventScrollWheel
+
+    def _is_scroll_in_qemu(event):
+        """Check if a scroll event occurred on top of a QEMU window.
+
+        Returns True only if the topmost window under the cursor belongs to
+        QEMU.  Skips our own overlay windows (which are mouse-transparent)
+        so they don't create dead zones over the guest.
+        """
+        import os
+        my_pid = os.getpid()
+        loc = CGEventGetLocation(event)
+        windows = CGWindowListCopyWindowInfo(
+            kCGWindowListOptionOnScreenOnly, kCGNullWindowID
+        )
+        for w in windows:
+            bounds = w.get("kCGWindowBounds")
+            if not bounds:
+                continue
+            # Check if cursor is inside this window
+            if not (bounds["X"] <= loc.x <= bounds["X"] + bounds["Width"] and
+                    bounds["Y"] <= loc.y <= bounds["Y"] + bounds["Height"]):
+                continue
+            # Skip our own windows (overlay — mouse-transparent)
+            if w.get("kCGWindowOwnerPID") == my_pid:
+                continue
+            # Topmost non-self window at cursor — is it QEMU?
+            owner = (w.get("kCGWindowOwnerName") or "").lower()
+            return "qemu" in owner
+        return False
 
     def callback(proxy, event_type, event, refcon):
         try:
             if event_type == kCGEventScrollWheel and controller.active:
+                # Cheap checks first — skip expensive window enumeration on
+                # throttled or zero-delta events
                 dy = CGEventGetIntegerValueField(event, kCGScrollWheelEventDeltaAxis1)
                 dy = max(-10, min(10, dy))
-                if dy:
-                    qmp.send_scroll(dy, keys=controller.scroll_keys)
-                    stats["scrolls"] += 1
+                if not dy:
+                    return event
+                now = time.monotonic()
+                if now - last_scroll[0] < 0.08:  # 80 ms throttle
+                    return event
+                # Expensive: check cursor is inside the topmost QEMU window
+                if not _is_scroll_in_qemu(event):
+                    return event
+                last_scroll[0] = now
+                qmp.send_scroll(dy, keys=controller.scroll_keys)
+                stats["scrolls"] += 1
             return event
         except Exception as e:
             print(f"[!] Event error: {e}", file=sys.stderr)
@@ -337,7 +381,7 @@ def _start_scroll_capture(qmp, controller):
     mode_label = "Arrow Keys ⬆⬇" if controller.scroll_keys == "arrows" else "Space/Shift+Space ␣⇧"
     print(f"╔══════════════════════════════════════════════╗")
     print(f"║  macOS Scroll → QEMU Win98 via QMP           ║")
-    print(f"║  Mode: {mode_label:<37s}                     ║")
+    print(f"║  Mode: {mode_label:<37s} ║")
     print(f"║  Click 'Scroll' in menu bar to change mode   ║")
     print(f"║  Quit from menu bar to stop (Ctrl+C won't)   ║")
     print(f"╚══════════════════════════════════════════════╝")

@@ -192,7 +192,7 @@ The `usb-tablet` device uses HID absolute coordinates (0–32767). The tool maps
 |---|---|---|---|
 | Runs inside guest | ❌ (needs Linux) | ✅ (needs Win10+) | ❌ (runs on host) |
 | Transport | TCP → uinput | WriteFile → VHF kernel driver | QMP → QEMU input layer |
-| Guest requirements | Linux evdev + uinput | Windows 10 VHF | None (scroll needs IntelliPoint) |
+| Guest requirements | Linux evdev + uinput | Windows 10 VHF | **None** |
 | Win98 compatible | ❌ | ❌ | ✅ |
 | macOS host | ❌ (evdev only) | N/A | ✅ (CGEvent) |
 | Linux remote | ✅ | N/A | ✅ (evdev) |
@@ -250,7 +250,7 @@ Grant Accessibility permissions:
 - Two-finger swipe is mapped to keyboard keys (not a real scroll wheel)
 - **`--scroll-keys arrows`** (default) — Arrow Up/Down. Works in Explorer, text editors, most apps
 - **`--scroll-keys space`** — Space/Shift+Space. Works in web browsers (Browservice)
-- Switch modes at any time by restarting with a different `--scroll-keys` value
+- Switch modes at any time from the menu bar app (`--app`), or restart with a different `--scroll-keys` value
 
 ### Using with launch-win98.sh
 
