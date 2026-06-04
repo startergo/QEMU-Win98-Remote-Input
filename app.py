@@ -305,7 +305,9 @@ def _start_scroll_capture(qmp, controller):
         print("  Run: pip3 install pyobjc-framework-Quartz")
         sys.exit(1)
 
+    import time
     stats = {"scrolls": 0}
+    last_scroll = [0.0]  # mutable for closure; throttle timestamp
 
     event_mask = 1 << kCGEventScrollWheel
 
@@ -332,6 +334,10 @@ def _start_scroll_capture(qmp, controller):
             if event_type == kCGEventScrollWheel and controller.active:
                 if not _is_scroll_in_qemu(event):
                     return event
+                now = time.monotonic()
+                if now - last_scroll[0] < 0.08:  # 80 ms throttle
+                    return event
+                last_scroll[0] = now
                 dy = CGEventGetIntegerValueField(event, kCGScrollWheelEventDeltaAxis1)
                 dy = max(-10, min(10, dy))
                 if dy:
