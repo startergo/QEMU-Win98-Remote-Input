@@ -315,15 +315,16 @@ def _start_scroll_capture(qmp, controller):
         """Check if a scroll event occurred on top of a QEMU window.
 
         Returns True only if the topmost window under the cursor belongs to
-        QEMU.  This prevents scroll injection when a non-QEMU window overlaps
-        the QEMU window area.
+        QEMU.  Skips our own overlay windows (which are mouse-transparent)
+        so they don't create dead zones over the guest.
         """
+        import os
+        my_pid = os.getpid()
         loc = CGEventGetLocation(event)
         windows = CGWindowListCopyWindowInfo(
             kCGWindowListOptionOnScreenOnly, kCGNullWindowID
         )
         for w in windows:
-            owner = (w.get("kCGWindowOwnerName") or "").lower()
             bounds = w.get("kCGWindowBounds")
             if not bounds:
                 continue
@@ -331,7 +332,11 @@ def _start_scroll_capture(qmp, controller):
             if not (bounds["X"] <= loc.x <= bounds["X"] + bounds["Width"] and
                     bounds["Y"] <= loc.y <= bounds["Y"] + bounds["Height"]):
                 continue
-            # This is the topmost window at the cursor — is it QEMU?
+            # Skip our own windows (overlay — mouse-transparent)
+            if w.get("kCGWindowOwnerPID") == my_pid:
+                continue
+            # Topmost non-self window at cursor — is it QEMU?
+            owner = (w.get("kCGWindowOwnerName") or "").lower()
             return "qemu" in owner
         return False
 
