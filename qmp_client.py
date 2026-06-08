@@ -164,10 +164,14 @@ class QMPClient:
         import os
         path = str(path)
 
-        # Try native PNG (QEMU >= 7.0)
-        self._execute("screendump", {"filename": path, "format": "png"})
-        if os.path.exists(path) and os.path.getsize(path) > 0:
-            return
+        # Try native PNG (QEMU >= 7.0); catch QMPError for older QEMU
+        # that doesn't support the "format" parameter.
+        try:
+            self._execute("screendump", {"filename": path, "format": "png"})
+            if os.path.exists(path) and os.path.getsize(path) > 0:
+                return
+        except QMPError:
+            pass  # Fall through to PPM conversion
 
         # Fallback: PPM -> PNG conversion
         import tempfile
@@ -178,8 +182,8 @@ class QMPClient:
             self._execute("screendump", {"filename": tmp_name})
             if os.path.getsize(tmp_name) == 0:
                 raise RuntimeError("screendump returned empty file")
-            img = Image.open(tmp_name)
-            img.save(path, format="png")
+            with Image.open(tmp_name) as img:
+                img.save(path, format="png")
         finally:
             os.unlink(tmp_name)
 

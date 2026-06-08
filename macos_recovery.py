@@ -18,6 +18,16 @@ class MacOSRecovery:
         self.qmp = qmp
         self.ocr = OCRScreen(qmp)
 
+    def cleanup(self):
+        """Release resources (OCR temp directory)."""
+        self.ocr.cleanup()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.cleanup()
+
     # -- Navigation --------------------------------------------------------
 
     def navigate_to_terminal(self, auto=True):

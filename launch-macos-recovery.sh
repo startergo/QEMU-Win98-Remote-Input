@@ -14,11 +14,15 @@
 
 set -e
 
+# ── Resolve script directory ────────────────────────────────
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
 # ── Configuration ────────────────────────────────────────────
 QMP_SOCK="/tmp/qemu-macos.sock"
 DISK="macos.qcow2"
 INSTALLER=""
 SCRIPT_ISO=""
+VOLUME_ID="MACROS"
 RAM_MB=4096
 MANUAL=0
 EXTRA_ARGS=""
@@ -26,16 +30,17 @@ EXTRA_ARGS=""
 # ── Parse arguments ──────────────────────────────────────────
 while [ $# -gt 0 ]; do
     case "$1" in
-        --disk)      shift; DISK="$1" ;;
-        --installer) shift; INSTALLER="$1" ;;
-        --iso)       shift; SCRIPT_ISO="$1" ;;
-        --ram)       shift; RAM_MB="$1" ;;
-        --manual)    MANUAL=1 ;;
-        --headless)  EXTRA_ARGS="$EXTRA_ARGS -display none" ;;
-        --vnc)       EXTRA_ARGS="$EXTRA_ARGS -display vnc=:1" ;;
+        --disk)       shift; DISK="$1" ;;
+        --installer)  shift; INSTALLER="$1" ;;
+        --iso)        shift; SCRIPT_ISO="$1" ;;
+        --volume-id)  shift; VOLUME_ID="$1" ;;
+        --ram)        shift; RAM_MB="$1" ;;
+        --manual)     MANUAL=1 ;;
+        --headless)   EXTRA_ARGS="$EXTRA_ARGS -display none" ;;
+        --vnc)        EXTRA_ARGS="$EXTRA_ARGS -display vnc=:1" ;;
         *)
-            echo "Unknown option: $1"
-            echo "Usage: $0 [--disk path] [--installer path] [--iso path] [--ram MB] [--manual] [--headless] [--vnc]"
+            echo "Unknown option: $1" >&2
+            echo "Usage: $0 [--disk path] [--installer path] [--iso path] [--volume-id label] [--ram MB] [--manual] [--headless] [--vnc]" >&2
             exit 1
             ;;
     esac
@@ -45,22 +50,18 @@ done
 # ── Cleanup old QMP socket ───────────────────────────────────
 rm -f "$QMP_SOCK"
 
-# ── Build drive arguments ────────────────────────────────────
-DRIVES="-drive id=macos,if=none,file=$DISK"
-[ -n "$INSTALLER" ] && DRIVES="$DRIVES -drive id=installer,if=none,file=$INSTALLER"
-[ -n "$SCRIPT_ISO" ] && DRIVES="$DRIVES -drive id=scripts,if=none,media=cdrom,file=$SCRIPT_ISO"
-
 # ── Start QEMU ───────────────────────────────────────────────
 echo "Starting QEMU: macOS Recovery"
 echo "QMP socket: $QMP_SOCK"
 echo "RAM: ${RAM_MB}MB"
 
-qemu-system-x86_64 \
+# Build QEMU command — drives are attached to devices, not if=none
+QEMU_CMD="qemu-system-x86_64 \
     -nodefaults \
     -rtc base=localtime \
     -display sdl \
     -monitor stdio \
-    -name "macOS Recovery" \
+    -name \"macOS Recovery\" \
     -M q35,accel=hvf \
     -cpu host \
     -m $RAM_MB \
@@ -69,9 +70,20 @@ qemu-system-x86_64 \
     -device ich9-usb-ehci1 \
     -device usb-kbd \
     -device usb-tablet \
-    $DRIVES \
-    -qmp unix:"$QMP_SOCK",server,nowait \
-    $EXTRA_ARGS &
+    -drive id=macos,if=virtio,file=$DISK"
+
+[ -n "$INSTALLER" ] && QEMU_CMD="$QEMU_CMD \
+    -drive id=installer,if=none,file=$INSTALLER \
+    -device ide-cd,drive=installer"
+[ -n "$SCRIPT_ISO" ] && QEMU_CMD="$QEMU_CMD \
+    -drive id=scripts,if=none,media=cdrom,file=$SCRIPT_ISO \
+    -device ide-cd,drive=scripts"
+
+QEMU_CMD="$QEMU_CMD \
+    -qmp unix:\"$QMP_SOCK\",server,nowait \
+    $EXTRA_ARGS"
+
+eval "$QEMU_CMD" &
 
 QEMU_PID=$!
 echo "QEMU started (PID: $QEMU_PID)"
@@ -88,15 +100,15 @@ for i in $(seq 1 30); do
 done
 
 if [ ! -S "$QMP_SOCK" ]; then
-    echo " ERROR: QMP socket not created"
+    echo " ERROR: QMP socket not created" >&2
     exit 1
 fi
 
 # ── Auto-start recovery automation ───────────────────────────
 if [ "$MANUAL" -eq 0 ] && [ -n "$SCRIPT_ISO" ]; then
     echo "Starting recovery automation..."
-    python3 main.py --qmp "$QMP_SOCK" install \
-        --iso "$SCRIPT_ISO" --volume-id target-sh
+    python3 "$SCRIPT_DIR/main.py" --qmp "$QMP_SOCK" install \
+        --iso "$SCRIPT_ISO" --volume-id "$VOLUME_ID"
 fi
 
 # ── Wait for QEMU to exit ────────────────────────────────────

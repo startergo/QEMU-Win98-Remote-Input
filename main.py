@@ -108,36 +108,47 @@ def cmd_recovery(args):
 
     if args.recovery_action == "build-iso":
         # Build an ISO from script files (no QMP needed)
+        if not args.scripts:
+            print("ERROR: --scripts is required for build-iso", file=sys.stderr)
+            sys.exit(1)
+        if not args.iso_output:
+            print("ERROR: --iso-output is required for build-iso", file=sys.stderr)
+            sys.exit(1)
         scripts = {}
         for pair in args.scripts:
             name, path = pair.split("=", 1)
             with open(path) as f:
                 scripts[name] = f.read()
-        iso = build_script_iso(scripts, args.output, args.volume_id)
+        iso = build_script_iso(scripts, args.iso_output, args.volume_id)
         print(f"Created ISO: {iso}")
         return
 
     qmp = QMPClient(args.qmp)
     print(f"Connected to QEMU at {args.qmp}")
-    recovery = MacOSRecovery(qmp)
 
     try:
-        if args.recovery_action == "terminal":
-            recovery.navigate_to_terminal(auto=not args.manual)
+        with MacOSRecovery(qmp) as recovery:
+            if args.recovery_action == "terminal":
+                recovery.navigate_to_terminal(auto=not args.manual)
 
-        elif args.recovery_action == "interactive":
-            recovery.navigate_to_terminal(auto=not args.manual)
-            recovery.interactive()
+            elif args.recovery_action == "interactive":
+                recovery.navigate_to_terminal(auto=not args.manual)
+                recovery.interactive()
 
-        elif args.recovery_action == "run-script":
-            recovery.navigate_to_terminal(auto=not args.manual)
-            recovery.run_script_from_iso(
-                args.iso, args.script, args.volume_id
-            )
+            elif args.recovery_action == "run-script":
+                if not args.iso or not args.script:
+                    print("ERROR: --iso and --script are required for run-script", file=sys.stderr)
+                    sys.exit(1)
+                recovery.navigate_to_terminal(auto=not args.manual)
+                recovery.run_script_from_iso(
+                    args.iso, args.script, args.volume_id
+                )
 
-        elif args.recovery_action == "install":
-            recovery.install_macos(args.iso, args.volume_id)
-
+            elif args.recovery_action == "install":
+                if not args.iso:
+                    print("ERROR: --iso is required for install", file=sys.stderr)
+                    sys.exit(1)
+                recovery.install_macos(args.iso, args.volume_id)
     finally:
         qmp.disconnect()
 
@@ -155,10 +166,10 @@ def cmd_read_screen(args):
                 print("ERROR: tesseract not found. Install with: brew install tesseract")
                 sys.exit(1)
             text = ocr.read_text(psm=args.psm)
-            if args.output:
-                with open(args.output, "w") as f:
+            if args.ocr_output:
+                with open(args.ocr_output, "w") as f:
                     f.write(text)
-                print(f"OCR text written to {args.output}")
+                print(f"OCR text written to {args.ocr_output}")
             else:
                 print(text)
     finally:
@@ -233,6 +244,7 @@ Examples:
     parser.add_argument("--volume-id", default="MACROS", help="ISO volume label (default: MACROS)")
     parser.add_argument("--manual", action="store_true", help="Manual mode (no OCR, user presses Enter)")
     parser.add_argument("--scripts", nargs="+", metavar="NAME=PATH", help="Scripts for build-iso (name=path pairs)")
+    parser.add_argument("--iso-output", help="Output path for build-iso")
 
     # ── Read-screen mode options ────────────────────────────
     parser.add_argument(
@@ -240,9 +252,18 @@ Examples:
         help="Capture guest screen and OCR text to stdout",
     )
     parser.add_argument("--psm", type=int, default=6, help="Tesseract PSM mode (default: 6)")
-    parser.add_argument("--output", "-o", help="Write OCR text to file instead of stdout")
+    parser.add_argument("--ocr-output", "-o", help="Write OCR text to file instead of stdout")
 
     args = parser.parse_args()
+
+    # --qmp is required unless building an ISO (no QEMU connection needed)
+    needs_qmp = (args.read_screen or args.inject or args.remote
+                 or (args.recovery_action and args.recovery_action != "build-iso"))
+    if not needs_qmp and not args.recovery_action:
+        # Default local mode also needs QMP
+        needs_qmp = True
+    if needs_qmp and not args.qmp:
+        parser.error("--qmp is required for this mode")
 
     try:
         if args.read_screen:
@@ -260,7 +281,7 @@ Examples:
         print("Make sure QEMU is running with: -qmp unix:%s,server,nowait" % args.qmp)
         sys.exit(1)
     except FileNotFoundError as e:
-        if args.qmp and "qemu" in str(e).lower() or ".sock" in str(e):
+        if args.qmp and ("qemu" in str(e).lower() or ".sock" in str(e)):
             print(f"ERROR: QMP socket not found: {args.qmp}", file=sys.stderr)
             print("Make sure QEMU is running and the socket path is correct.")
         else:

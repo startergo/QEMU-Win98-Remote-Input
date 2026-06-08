@@ -298,7 +298,7 @@ python3 main.py --qmp /tmp/qemu-macos.sock install \
 # Build an ISO from script files
 python3 main.py build-iso \
     --scripts bootinst.sh=bootinst.txt nvram.sh=nvram.txt \
-    --output payload.iso --volume-id target-sh
+    --iso-output payload.iso --volume-id target-sh
 
 # Interactive mode — navigate to Terminal, then type commands on the host
 python3 main.py --qmp /tmp/qemu-macos.sock interactive
@@ -310,7 +310,7 @@ python3 main.py --qmp /tmp/qemu-macos.sock terminal --manual
 python3 main.py --qmp /tmp/qemu.sock --read-screen
 
 # Read guest screen text to file, sparse text mode
-python3 main.py --qmp /tmp/qemu.sock --read-screen --psm 11 -o guest-text.txt
+python3 main.py --qmp /tmp/qemu.sock --read-screen --psm 11 --ocr-output guest-text.txt
 
 # Pipe guest text to host clipboard
 python3 main.py --qmp /tmp/qemu.sock --read-screen | pbcopy
