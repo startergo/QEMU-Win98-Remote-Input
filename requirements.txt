@@ -1,5 +1,9 @@
 # macOS input capture (required for local mode)
 pyobjc-framework-Quartz>=9.0; sys_platform == "darwin"
 
+# macOS recovery automation (optional)
+# Requires: tesseract CLI (brew install tesseract)
+Pillow>=10.0
+
 # Linux remote sender (optional, Linux only)
 # evdev>=1.6.1; sys_platform == "linux"
