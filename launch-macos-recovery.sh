@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # ──────────────────────────────────────────────────────────────
 # launch-macos-recovery.sh — Launch QEMU with macOS recovery media
 #
