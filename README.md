@@ -271,6 +271,67 @@ chmod +x launch-win98.sh
 
 </details>
 
+## macOS Recovery Automation
+
+Automate macOS recovery console operations in QEMU — navigate the GUI, open Terminal, and run scripts from a mounted ISO. Modeled after [macos-virtualbox](https://github.com/startergo/macos-virtualbox).
+
+### Requirements
+
+- `tesseract` — OCR screen recognition (`brew install tesseract`)
+- `Pillow` — screenshot conversion (`pip3 install Pillow`)
+- `genisoimage` / `mkisofs` / `xorrisofs` — ISO creation (`brew install cdrtools`)
+
+### Usage
+
+```bash
+# Navigate to Terminal (OCR auto-detect or manual)
+python3 main.py --qmp /tmp/qemu-macos.sock terminal
+
+# Navigate + run a script from mounted ISO
+python3 main.py --qmp /tmp/qemu-macos.sock run-script \
+    --iso payload.iso --script bootinst.sh --volume-id bootinst-sh
+
+# Full two-terminal installer workflow
+python3 main.py --qmp /tmp/qemu-macos.sock install \
+    --iso payload.iso --volume-id target-sh
+
+# Build an ISO from script files
+python3 main.py build-iso \
+    --scripts bootinst.sh=bootinst.txt nvram.sh=nvram.txt \
+    --iso-output payload.iso --volume-id target-sh
+
+# Interactive mode — navigate to Terminal, then type commands on the host
+python3 main.py --qmp /tmp/qemu-macos.sock interactive
+
+# Manual mode (no OCR, user presses Enter at each step)
+python3 main.py --qmp /tmp/qemu-macos.sock terminal --manual
+
+# Read guest screen text via OCR
+python3 main.py --qmp /tmp/qemu.sock --read-screen
+
+# Read guest screen text to file, sparse text mode
+python3 main.py --qmp /tmp/qemu.sock --read-screen --psm 11 --ocr-output guest-text.txt
+
+# Pipe guest text to host clipboard
+python3 main.py --qmp /tmp/qemu.sock --read-screen | pbcopy
+```
+
+<details>
+<summary>Launch script for macOS recovery</summary>
+
+```bash
+# Start QEMU with macOS recovery media + auto-automation
+./launch-macos-recovery.sh --disk macos.qcow2 --iso payload.iso
+
+# Manual mode
+./launch-macos-recovery.sh --disk macos.qcow2 --iso payload.iso --manual
+
+# Headless + VNC
+./launch-macos-recovery.sh --headless --vnc
+```
+
+</details>
+
 ## License
 
 MIT

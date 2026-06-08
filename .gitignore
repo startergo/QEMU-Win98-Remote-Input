@@ -3,3 +3,4 @@ __pycache__/
 .mcp.json
 *.pyc
 clip98-darwin-arm64
+PLAN-macos-recovery.md

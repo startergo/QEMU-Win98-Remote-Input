@@ -90,14 +90,13 @@ class QMPClient:
         for ch in text:
             qcode = _char_to_qcode(ch)
             if qcode:
-                if ch.isupper():
+                needs_shift = ch in _SHIFT_CHARS
+                if needs_shift:
                     self.send_key("shift", down=True)
-                    self.send_key(qcode, down=True)
-                    self.send_key(qcode, down=False)
+                self.send_key(qcode, down=True)
+                self.send_key(qcode, down=False)
+                if needs_shift:
                     self.send_key("shift", down=False)
-                else:
-                    self.send_key(qcode, down=True)
-                    self.send_key(qcode, down=False)
                 time.sleep(delay)
 
     # ── Mouse ───────────────────────────────────────────────
@@ -153,6 +152,61 @@ class QMPClient:
         time.sleep(0.01)
         self.send_mouse_btn(button, False)
 
+    # ── Display / Recovery helpers ─────────────────────────
+
+    def screenshot(self, path):
+        """Capture VM display to a PNG file via QMP screendump.
+
+        Uses PNG format directly on QEMU >= 7.0.  Falls back to PPM -> PNG
+        conversion via Pillow on older versions.  Raises on empty output
+        (which indicates a silently failed screendump).
+        """
+        import os
+        path = str(path)
+
+        # Try native PNG (QEMU >= 7.0); catch QMPError for older QEMU
+        # that doesn't support the "format" parameter.
+        try:
+            self._execute("screendump", {"filename": path, "format": "png"})
+            if os.path.exists(path) and os.path.getsize(path) > 0:
+                return
+        except QMPError:
+            pass  # Fall through to PPM conversion
+
+        # Fallback: PPM -> PNG conversion
+        import tempfile
+        from PIL import Image
+        with tempfile.NamedTemporaryFile(suffix=".ppm", delete=False) as tmp:
+            tmp_name = tmp.name
+        try:
+            self._execute("screendump", {"filename": tmp_name})
+            if os.path.getsize(tmp_name) == 0:
+                raise RuntimeError("screendump returned empty file")
+            with Image.open(tmp_name) as img:
+                img.save(path, format="png")
+        finally:
+            os.unlink(tmp_name)
+
+    def press_enter(self):
+        """Send an Enter key press and release."""
+        self.send_key("ret", down=True)
+        self.send_key("ret", down=False)
+
+    def navigate_menu(self, *keys):
+        """Navigate macOS menu bar via single-character menu shortcuts.
+
+        Activates the menu bar (Ctrl+F2), then types each key + Enter to
+        drill through submenus.  For example:
+            navigate_menu('u', 't')   -> Utilities -> Terminal
+        """
+        self.send_key_combo(["ctrl", "f2"])
+        time.sleep(0.3)
+        for key in keys:
+            self.type_string(key, delay=0.05)
+            time.sleep(0.3)
+            self.press_enter()
+            time.sleep(0.3)
+
     # ── Connection ──────────────────────────────────────────
 
     def disconnect(self):
@@ -168,20 +222,29 @@ class QMPClient:
         self.sock.close()
 
 
+# Characters that need Shift held during press.
+_SHIFT_CHARS = set('!@#$%^&*()_+{}|:"~<>?ABCDEFGHIJKLMNOPQRSTUVWXYZ')
+
+# Maps any printable ASCII character to its base qcode (the key without shift).
+# Shifted symbols map to the key that produces them when shifted.
+_BASE_KEY = {
+    **{c: c for c in 'abcdefghijklmnopqrstuvwxyz0123456789'},
+    **{c.upper(): c for c in 'abcdefghijklmnopqrstuvwxyz'},
+    ' ': 'spc', '\n': 'ret', '\t': 'tab',
+    '.': 'dot', ',': 'comma', '/': 'slash', '\\': 'backslash',
+    ';': 'semicolon', "'": 'apostrophe', '[': 'bracket_left',
+    ']': 'bracket_right', '-': 'minus', '=': 'equal',
+    '`': 'grave_accent',
+    # Shifted symbols -> base key
+    '!': '1', '@': '2', '#': '3', '$': '4', '%': '5',
+    '^': '6', '&': '7', '*': '8', '(': '9', ')': '0',
+    '_': 'minus', '+': 'equal',
+    '{': 'bracket_left', '}': 'bracket_right',
+    ':': 'semicolon', '"': 'apostrophe',
+    '~': 'grave_accent', '|': 'backslash',
+    '<': 'comma', '>': 'dot', '?': 'slash',
+}
+
+
 def _char_to_qcode(ch):
-    _map = {
-        'a': 'a', 'b': 'b', 'c': 'c', 'd': 'd', 'e': 'e',
-        'f': 'f', 'g': 'g', 'h': 'h', 'i': 'i', 'j': 'j',
-        'k': 'k', 'l': 'l', 'm': 'm', 'n': 'n', 'o': 'o',
-        'p': 'p', 'q': 'q', 'r': 'r', 's': 's', 't': 't',
-        'u': 'u', 'v': 'v', 'w': 'w', 'x': 'x', 'y': 'y',
-        'z': 'z',
-        '0': '0', '1': '1', '2': '2', '3': '3', '4': '4',
-        '5': '5', '6': '6', '7': '7', '8': '8', '9': '9',
-        ' ': 'spc', '\n': 'ret', '\t': 'tab',
-        '.': 'dot', ',': 'comma', '/': 'slash', '\\': 'backslash',
-        ';': 'semicolon', "'": 'apostrophe', '[': 'bracket_left',
-        ']': 'bracket_right', '-': 'minus', '=': 'equal',
-        '`': 'grave_accent',
-    }
-    return _map.get(ch.lower())
+    return _BASE_KEY.get(ch)

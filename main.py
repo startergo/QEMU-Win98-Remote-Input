@@ -101,6 +101,81 @@ def cmd_inject(args):
         qmp.sock.close()
 
 
+def cmd_recovery(args):
+    """Recovery mode: automate macOS recovery console operations."""
+    from macos_recovery import MacOSRecovery
+    from iso_builder import build_script_iso
+
+    if args.recovery_action == "build-iso":
+        # Build an ISO from script files (no QMP needed)
+        if not args.scripts:
+            print("ERROR: --scripts is required for build-iso", file=sys.stderr)
+            sys.exit(1)
+        if not args.iso_output:
+            print("ERROR: --iso-output is required for build-iso", file=sys.stderr)
+            sys.exit(1)
+        scripts = {}
+        for pair in args.scripts:
+            name, path = pair.split("=", 1)
+            with open(path) as f:
+                scripts[name] = f.read()
+        iso = build_script_iso(scripts, args.iso_output, args.volume_id)
+        print(f"Created ISO: {iso}")
+        return
+
+    qmp = QMPClient(args.qmp)
+    print(f"Connected to QEMU at {args.qmp}")
+
+    try:
+        with MacOSRecovery(qmp) as recovery:
+            if args.recovery_action == "terminal":
+                recovery.navigate_to_terminal(auto=not args.manual)
+
+            elif args.recovery_action == "interactive":
+                recovery.navigate_to_terminal(auto=not args.manual)
+                recovery.interactive()
+
+            elif args.recovery_action == "run-script":
+                if not args.iso or not args.script:
+                    print("ERROR: --iso and --script are required for run-script", file=sys.stderr)
+                    sys.exit(1)
+                recovery.navigate_to_terminal(auto=not args.manual)
+                recovery.run_script_from_iso(
+                    args.iso, args.script, args.volume_id
+                )
+
+            elif args.recovery_action == "install":
+                if not args.iso:
+                    print("ERROR: --iso is required for install", file=sys.stderr)
+                    sys.exit(1)
+                recovery.install_macos(args.iso, args.volume_id)
+    finally:
+        qmp.disconnect()
+
+
+def cmd_read_screen(args):
+    """Capture guest screen and OCR the text."""
+    from ocr_screen import OCRScreen
+
+    qmp = QMPClient(args.qmp)
+    print(f"Connected to QEMU at {args.qmp}")
+
+    try:
+        with OCRScreen(qmp) as ocr:
+            if not ocr.available:
+                print("ERROR: tesseract not found. Install with: brew install tesseract")
+                sys.exit(1)
+            text = ocr.read_text(psm=args.psm)
+            if args.ocr_output:
+                with open(args.ocr_output, "w") as f:
+                    f.write(text)
+                print(f"OCR text written to {args.ocr_output}")
+            else:
+                print(text)
+    finally:
+        qmp.disconnect()
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Forward input events into QEMU Win98 guest via QMP",
@@ -119,8 +194,8 @@ Examples:
 
     # ── Global options ──────────────────────────────────────
     parser.add_argument(
-        "--qmp", required=True,
-        help="Path to QEMU QMP Unix socket",
+        "--qmp",
+        help="Path to QEMU QMP Unix socket (not needed for build-iso)",
     )
     parser.add_argument(
         "--capture", action="store_true",
@@ -158,10 +233,44 @@ Examples:
     parser.add_argument("--move", type=int, nargs=2, metavar=("X", "Y"), help="Move mouse to absolute position")
     parser.add_argument("--delay", type=int, default=30, help="Delay between events in ms (default: 30)")
 
+    # ── Recovery mode options ───────────────────────────────
+    parser.add_argument(
+        "recovery_action", nargs="?",
+        choices=["terminal", "run-script", "install", "build-iso", "interactive"],
+        help="Recovery action: terminal, run-script, install, build-iso, interactive",
+    )
+    parser.add_argument("--iso", help="Script payload ISO path")
+    parser.add_argument("--script", help="Script filename inside the ISO")
+    parser.add_argument("--volume-id", default="MACROS", help="ISO volume label (default: MACROS)")
+    parser.add_argument("--manual", action="store_true", help="Manual mode (no OCR, user presses Enter)")
+    parser.add_argument("--scripts", nargs="+", metavar="NAME=PATH", help="Scripts for build-iso (name=path pairs)")
+    parser.add_argument("--iso-output", help="Output path for build-iso")
+
+    # ── Read-screen mode options ────────────────────────────
+    parser.add_argument(
+        "--read-screen", action="store_true",
+        help="Capture guest screen and OCR text to stdout",
+    )
+    parser.add_argument("--psm", type=int, default=6, help="Tesseract PSM mode (default: 6)")
+    parser.add_argument("--ocr-output", "-o", help="Write OCR text to file instead of stdout")
+
     args = parser.parse_args()
 
+    # --qmp is required unless building an ISO (no QEMU connection needed)
+    needs_qmp = (args.read_screen or args.inject or args.remote
+                 or (args.recovery_action and args.recovery_action != "build-iso"))
+    if not needs_qmp and not args.recovery_action:
+        # Default local mode also needs QMP
+        needs_qmp = True
+    if needs_qmp and not args.qmp:
+        parser.error("--qmp is required for this mode")
+
     try:
-        if args.inject:
+        if args.read_screen:
+            cmd_read_screen(args)
+        elif args.recovery_action:
+            cmd_recovery(args)
+        elif args.inject:
             cmd_inject(args)
         elif args.remote:
             cmd_remote(args)
@@ -171,9 +280,12 @@ Examples:
         print(f"ERROR: {e}", file=sys.stderr)
         print("Make sure QEMU is running with: -qmp unix:%s,server,nowait" % args.qmp)
         sys.exit(1)
-    except FileNotFoundError:
-        print(f"ERROR: QMP socket not found: {args.qmp}", file=sys.stderr)
-        print("Make sure QEMU is running and the socket path is correct.")
+    except FileNotFoundError as e:
+        if args.qmp and ("qemu" in str(e).lower() or ".sock" in str(e)):
+            print(f"ERROR: QMP socket not found: {args.qmp}", file=sys.stderr)
+            print("Make sure QEMU is running and the socket path is correct.")
+        else:
+            print(f"ERROR: {e}", file=sys.stderr)
         sys.exit(1)
     except KeyboardInterrupt:
         print("\nStopped.")
