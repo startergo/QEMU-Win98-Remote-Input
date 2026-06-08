@@ -55,35 +55,41 @@ echo "Starting QEMU: macOS Recovery"
 echo "QMP socket: $QMP_SOCK"
 echo "RAM: ${RAM_MB}MB"
 
-# Build QEMU command — drives are attached to devices, not if=none
-QEMU_CMD="qemu-system-x86_64 \
-    -nodefaults \
-    -rtc base=localtime \
-    -display sdl \
-    -monitor stdio \
-    -name \"macOS Recovery\" \
-    -M q35,accel=hvf \
-    -cpu host \
-    -m $RAM_MB \
-    -device VGA \
-    -device virtio-net-pci,rombar=0 \
-    -device ich9-usb-ehci1 \
-    -device usb-kbd \
-    -device usb-tablet \
-    -drive id=macos,if=virtio,file=$DISK"
+# Build QEMU command as an array — avoids eval and shell injection
+QEMU_CMD=(
+    qemu-system-x86_64
+    -nodefaults
+    -rtc base=localtime
+    -display sdl
+    -monitor stdio
+    -name "macOS Recovery"
+    -M q35,accel=hvf
+    -cpu host
+    -m "$RAM_MB"
+    -device VGA
+    -device virtio-net-pci,rombar=0
+    -device ich9-usb-ehci1
+    -device usb-kbd
+    -device usb-tablet
+    -drive id=macos,if=virtio,file="$DISK"
+)
 
-[ -n "$INSTALLER" ] && QEMU_CMD="$QEMU_CMD \
-    -drive id=installer,if=none,file=$INSTALLER \
-    -device ide-cd,drive=installer"
-[ -n "$SCRIPT_ISO" ] && QEMU_CMD="$QEMU_CMD \
-    -drive id=scripts,if=none,media=cdrom,file=$SCRIPT_ISO \
-    -device ide-cd,drive=scripts"
+[ -n "$INSTALLER" ] && QEMU_CMD+=(
+    -drive id=installer,if=none,file="$INSTALLER"
+    -device ide-cd,drive=installer
+)
+[ -n "$SCRIPT_ISO" ] && QEMU_CMD+=(
+    -drive id=scripts,if=none,media=cdrom,file="$SCRIPT_ISO"
+    -device ide-cd,drive=scripts
+)
 
-QEMU_CMD="$QEMU_CMD \
-    -qmp unix:\"$QMP_SOCK\",server,nowait \
-    $EXTRA_ARGS"
+QEMU_CMD+=(
+    -qmp "unix:$QMP_SOCK,server,nowait"
+)
+# shellcheck disable=SC2086 — EXTRA_ARGS is intentionally word-split
+[ -n "$EXTRA_ARGS" ] && QEMU_CMD+=($EXTRA_ARGS)
 
-eval "$QEMU_CMD" &
+"${QEMU_CMD[@]}" &
 
 QEMU_PID=$!
 echo "QEMU started (PID: $QEMU_PID)"
